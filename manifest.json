@@ -1,0 +1,10 @@
+{
+    "display_name": "Blue PIN Lock",
+    "loading_order": 999,
+    "js": "index.js",
+    "css": "style.css",
+    "author": "Jesse + Codex",
+    "version": "1.0.0",
+    "auto_update": false,
+    "minimum_client_version": "1.12.0"
+}
