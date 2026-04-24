@@ -1,9 +1,10 @@
 const EXTENSION_NAME = 'blue-pin-lock';
-const PIN_CODE = 'f1nn';
+const PIN_LENGTH = 4;
 const MAX_ATTEMPTS = 3;
 const LOCKOUT_MS = 5 * 60 * 1000;
 
 const STORAGE_KEYS = {
+    pin: `${EXTENSION_NAME}:pin`,
     lockedUntil: `${EXTENSION_NAME}:lockedUntil`,
     attempts: `${EXTENSION_NAME}:attempts`,
 };
@@ -17,6 +18,19 @@ let digits = [];
 let countdownTimer;
 let isUnlocked = false;
 let isInitialized = false;
+let setupPin = '';
+
+function getPin() {
+    return localStorage.getItem(STORAGE_KEYS.pin);
+}
+
+function setPin(pin) {
+    localStorage.setItem(STORAGE_KEYS.pin, pin);
+}
+
+function hasPin() {
+    return Boolean(getPin());
+}
 
 function getLockedUntil() {
     return Number(localStorage.getItem(STORAGE_KEYS.lockedUntil) || 0);
@@ -72,6 +86,11 @@ function clearEntry() {
 }
 
 function updateAttemptText(attemptsRemaining) {
+    if (attemptsRemaining === '') {
+        attemptText.textContent = '';
+        return;
+    }
+
     attemptText.textContent = `${attemptsRemaining} ${attemptsRemaining === 1 ? 'try' : 'tries'} left`;
 }
 
@@ -129,6 +148,11 @@ function showLock(reason = 'startup') {
     overlay.dataset.reason = reason;
     requestAnimationFrame(() => overlay.classList.add('is-visible'));
 
+    if (!hasPin()) {
+        showSetup();
+        return;
+    }
+
     if (isLockoutActive()) {
         showLockout();
         return;
@@ -136,11 +160,36 @@ function showLock(reason = 'startup') {
 
     stopCountdown();
     overlay.classList.remove('is-locked-out', 'is-shaking');
+    overlay.dataset.mode = 'unlock';
     input.disabled = false;
     clearEntry();
     updateAttemptText(MAX_ATTEMPTS - getAttempts());
     countdownText.textContent = '';
-    setStatus(reason === 'focus-return' ? 'Welcome back. PIN, please.' : 'Enter PIN to unlock SillyTavern.', 'info');
+    overlay.querySelector('.bpl-kicker').textContent = 'SillyTavern is sealed';
+    overlay.querySelector('#blue-pin-lock-title').textContent = 'PIN required';
+    overlay.querySelector('.bpl-copy').textContent = 'Four characters. Three chances. No pressure, obviously.';
+    overlay.querySelector('.bpl-submit').textContent = 'Unlock';
+    input.setAttribute('aria-label', 'PIN code');
+    setStatus(reason === 'focus-return' ? 'Welcome back. PIN, please.' : 'Enter your PIN to unlock SillyTavern.', 'info');
+    setTimeout(() => input.focus({ preventScroll: true }), 150);
+}
+
+function showSetup(confirming = false) {
+    stopCountdown();
+    overlay.classList.remove('is-locked-out', 'is-shaking');
+    overlay.dataset.mode = confirming ? 'setup-confirm' : 'setup';
+    input.disabled = false;
+    clearEntry();
+    updateAttemptText('');
+    countdownText.textContent = '';
+    overlay.querySelector('.bpl-kicker').textContent = 'First run setup';
+    overlay.querySelector('#blue-pin-lock-title').textContent = confirming ? 'Confirm PIN' : 'Choose PIN';
+    overlay.querySelector('.bpl-copy').textContent = confirming
+        ? 'Type it one more time so future-you does not get betrayed.'
+        : 'Pick any four letters or numbers. Keep it memorable.';
+    overlay.querySelector('.bpl-submit').textContent = confirming ? 'Save PIN' : 'Continue';
+    input.setAttribute('aria-label', confirming ? 'Confirm new PIN' : 'New PIN');
+    setStatus(confirming ? 'Confirm the same four characters.' : 'Choose your four-character passcode.', 'info');
     setTimeout(() => input.focus({ preventScroll: true }), 150);
 }
 
@@ -163,24 +212,48 @@ function shake() {
 }
 
 function submitPin() {
-    if (isLockoutActive()) {
+    if (overlay.dataset.mode !== 'setup' && overlay.dataset.mode !== 'setup-confirm' && isLockoutActive()) {
         updateLockoutDisplay();
         return;
     }
 
     const value = input.value.toLowerCase();
 
-    if (value.length !== PIN_CODE.length) {
+    if (value.length !== PIN_LENGTH) {
         shake();
         setStatus('Four characters. I believe in you, tragically.', 'error');
         input.focus({ preventScroll: true });
         return;
     }
 
+    if (overlay.dataset.mode === 'setup') {
+        setupPin = value;
+        showSetup(true);
+        return;
+    }
+
+    if (overlay.dataset.mode === 'setup-confirm') {
+        if (value !== setupPin) {
+            setupPin = '';
+            shake();
+            showSetup(false);
+            setStatus('Those did not match. Fresh start, because betrayal hurts.', 'error');
+            return;
+        }
+
+        setPin(value);
+        setupPin = '';
+        clearAttempts();
+        clearLockedUntil();
+        setStatus('PIN saved. You are in.', 'success');
+        setTimeout(hideLock, 220);
+        return;
+    }
+
     const attempts = getAttempts() + 1;
     setAttempts(attempts);
 
-    if (value === PIN_CODE) {
+    if (value === getPin()) {
         clearAttempts();
         clearLockedUntil();
         setStatus('Unlocked. Go make questionable chat decisions.', 'success');
@@ -249,10 +322,10 @@ function createOverlay() {
 
     overlay.querySelector('.bpl-submit').addEventListener('click', submitPin);
     input.addEventListener('input', () => {
-        input.value = input.value.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 4);
+        input.value = input.value.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, PIN_LENGTH);
         updateDigits();
 
-        if (input.value.length === 4) {
+        if (input.value.length === PIN_LENGTH) {
             submitPin();
         }
     });
@@ -265,6 +338,12 @@ function createOverlay() {
     });
 
     overlay.addEventListener('pointerdown', event => {
+        if (event.target.closest('.bpl-digits') || event.target.closest('.bpl-panel')) {
+            if (!event.target.closest('.bpl-submit')) {
+                input.focus({ preventScroll: true });
+            }
+        }
+
         if (!event.target.closest('.bpl-panel')) {
             input.focus({ preventScroll: true });
             shake();

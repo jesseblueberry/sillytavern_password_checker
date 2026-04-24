@@ -1,6 +1,6 @@
 # Blue PIN Lock
 
-A SillyTavern UI extension that blocks the screen on startup and whenever the tab loses focus, then unlocks with the 4-character PIN `f1nn`.
+A SillyTavern UI extension that blocks the screen on startup and whenever the tab loses focus, then unlocks with your chosen 4-character PIN.
 
 After three wrong attempts, it locks for 5 minutes. The lockout timestamp is stored in `localStorage`, so refreshing the tab does not skip the timer.
 
@@ -15,10 +15,8 @@ Then restart or reload SillyTavern and enable the extension if needed.
 
 ## PIN
 
-The current PIN is set near the top of `index.js`:
+On first run, the extension asks you to choose and confirm a 4-character PIN. It is stored in browser `localStorage`.
 
-```js
-const PIN_CODE = 'f1nn';
-```
+To reset it, delete the `blue-pin-lock:pin` value from localStorage and reload SillyTavern.
 
-This is a client-side privacy lock, not serious cryptographic security. Anyone with direct file/devtools access can read or change it.
+This is a client-side privacy lock, not serious cryptographic security. Anyone with direct browser/devtools access can read or change it.
